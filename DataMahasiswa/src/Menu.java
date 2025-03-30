@@ -5,6 +5,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 public class Menu extends JFrame{
@@ -30,6 +32,7 @@ public class Menu extends JFrame{
     private int selectedIndex = -1;
     // list untuk menampung semua mahasiswa
     private ArrayList<Mahasiswa> listMahasiswa;
+    private Database database;
 
     private JPanel mainPanel;
     private JTextField nimField;
@@ -51,8 +54,8 @@ public class Menu extends JFrame{
         // inisialisasi listMahasiswa
         listMahasiswa = new ArrayList<>();
 
-        // isi listMahasiswa
-        populateList();
+        // buat objek mahasiswa
+        database = new Database();
 
         // isi tabel mahasiswa
         mahasiswaTable.setModel(setTable());
@@ -133,16 +136,26 @@ public class Menu extends JFrame{
         DefaultTableModel temp = new DefaultTableModel(null, column);
 
         // isi tabel dengan listMahasiswa
-        for (int i = 0; i < listMahasiswa.size(); i++) {
-            Object[] row = new Object[5];
-            row[0] = i + 1;
-            row[1] = listMahasiswa.get(i).getNim();
-            row[2] = listMahasiswa.get(i).getNama();
-            row[3] = listMahasiswa.get(i).getJenisKelamin();
-            row[4] = listMahasiswa.get(i).getUmur();
+        try {
+            ResultSet resultSet = database.selectQuery("SELECT * FROM mahasiswa");
 
-            temp.addRow(row);
+            int i = 0;
+            while (resultSet.next()) {
+                Object[] row = new Object[5];
+
+                row[0] = i + 1;
+                row[1] = resultSet.getString("nim");
+                row[2] = resultSet.getString("nama");
+                row[3] = resultSet.getString("jenis_kelamin");
+                row[4] = resultSet.getString("umur");
+
+                temp.addRow(row);
+                i++;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
+
         return temp;
     }
 
@@ -153,8 +166,27 @@ public class Menu extends JFrame{
         String jenisKelamin = jenisKelaminComboBox.getSelectedItem().toString();
         int umur = (int) umurSpinner.getValue();
 
+        // Cek apakah ada input yang kosong
+        if (nim.isEmpty() || nama.isEmpty() || jenisKelamin.isEmpty() || umur <= 0) {
+            JOptionPane.showMessageDialog(null, "Terdapat baris inputan yang kosong", "Input Tidak Lengkap", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Cek apakah NIM sudah ada di database
+        String checkNimQuery = "SELECT COUNT(*) AS count FROM mahasiswa WHERE nim = '" + nim + "';";
+        try {
+            ResultSet resultSet = database.selectQuery(checkNimQuery);
+            if (resultSet.next() && resultSet.getInt("count") > 0) {
+                JOptionPane.showMessageDialog(null, "NIM sudah terdaftar! Gunakan NIM yang berbeda.", "Duplikasi NIM", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
         // tambahkan data ke dalam list
-        listMahasiswa.add(new Mahasiswa(nim, nama, jenisKelamin, umur));
+        String sql = "INSERT INTO mahasiswa VALUES (null, '" + nim + "', '" + nama + "', '" + jenisKelamin + "', '" + umur + "');";
+        database.insertUpdateDeleteQuery(sql);
 
         // update tabel
         mahasiswaTable.setModel(setTable());
@@ -174,11 +206,15 @@ public class Menu extends JFrame{
         String jenisKelamin = jenisKelaminComboBox.getSelectedItem().toString();
         int umur = (int) umurSpinner.getValue();
 
-        // ubah data mahasiswa di list
-        listMahasiswa.get(selectedIndex).setNim(nim);
-        listMahasiswa.get(selectedIndex).setNama(nama);
-        listMahasiswa.get(selectedIndex).setJenisKelamin(jenisKelamin);
-        listMahasiswa.get(selectedIndex).setUmur(umur);
+        // Cek apakah ada input yang kosong
+        if (nim.isEmpty() || nama.isEmpty() || jenisKelamin.isEmpty() || umur <= 0) {
+            JOptionPane.showMessageDialog(null, "Terdapat baris inputan yang kosong", "Input Tidak Lengkap", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Query update
+        String sql = "UPDATE mahasiswa SET nama = '" + nama + "', jenis_kelamin = '" + jenisKelamin + "', umur = " + umur + " WHERE nim = " + nim + ";";
+        database.insertUpdateDeleteQuery(sql);
 
         // update tabel
         mahasiswaTable.setModel(setTable());
@@ -192,8 +228,12 @@ public class Menu extends JFrame{
     }
 
     public void deleteData() {
-        // hapus data dari list
-        listMahasiswa.remove(selectedIndex);
+        // Ambil NIM dari mahasiswa yang dipilih
+        String nim = nimField.getText();
+
+        // Query delete berdasarkan nim
+        String sql = "DELETE FROM mahasiswa WHERE nim = '" + nim + "';";
+        database.insertUpdateDeleteQuery(sql);
 
         // update tabel
         mahasiswaTable.setModel(setTable());
